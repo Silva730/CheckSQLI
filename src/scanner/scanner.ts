@@ -2,15 +2,32 @@ import axios from "axios";
 import { payloads } from "./payloads.js";
 
 const client = axios.create({
-    timeout: 5000,
+    timeout: 8000,
     validateStatus: () => true,
 });
+
+type Detail = {
+    payload: string;
+    reason: string;
+};
 
 type Report = {
     url: string;
     vulnerable: boolean;
-    details: string[];
+    details: Detail[];
 };
+
+const SQL_ERRORS = [
+    "sql syntax",
+    "mysql",
+    "postgres",
+    "syntax error",
+    "unterminated",
+    "odbc",
+    "pdo",
+];
+
+const TEST_PARAM = "id";
 
 export async function scanUrl(url: string): Promise<Report> {
     const report: Report = {
@@ -19,37 +36,60 @@ export async function scanUrl(url: string): Promise<Report> {
         details: [],
     };
 
+    
+    let baselineSize = 0;
+
+    try {
+        const baseRes = await client.get(url);
+        baselineSize = baseRes.data?.toString().length || 0;
+    } catch {
+        return report;
+    }
+
     for (const payload of payloads) {
-        const testUrl = `${url}${payload}`;
+        const testUrl = `${url}?${TEST_PARAM}=${encodeURIComponent(payload)}`;
 
         try {
+            const start = Date.now();
             const res = await client.get(testUrl);
+            const elapsed = Date.now() - start;
+
             const body = res.data?.toString().toLowerCase() || "";
+            const sizeDiff = Math.abs(body.length - baselineSize);
 
+            
             if (res.status >= 500) {
-                report.vulnerable = true;
-                report.details.push(
-                    `Payload "${payload}" causou erro ${res.status}`
-                );
+                mark(report, payload, `HTTP ${res.status}`);
             }
 
-            if (
-                body.includes("sql") ||
-                body.includes("syntax") ||
-                body.includes("mysql") ||
-                body.includes("postgres")
-            ) {
-                report.vulnerable = true;
-                report.details.push(
-                    `Payload "${payload}" retornou erro de banco`
-                );
+            
+            if (SQL_ERRORS.some(err => body.includes(err))) {
+                mark(report, payload, "SQL error message detected");
             }
-        } catch (err) {
-            report.details.push(
-                `Erro ao testar payload "${payload}"`
-            );
+
+            
+            if (sizeDiff > 1000) {
+                mark(report, payload, "Response size differs from baseline");
+            }
+
+            
+            if (payload.toLowerCase().includes("sleep") && elapsed > 4000) {
+                mark(report, payload, `Time delay detected (${elapsed}ms)`);
+            }
+
+        } catch {
+
         }
     }
 
     return report;
+}
+
+function mark(report: Report, payload: string, reason: string) {
+    report.vulnerable = true;
+
+    
+    if (!report.details.find(d => d.payload === payload && d.reason === reason)) {
+        report.details.push({ payload, reason });
+    }
 }
