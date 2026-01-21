@@ -24,3 +24,31 @@
 - Node.js
 - Express
 - Axios
+
+## 📡 Endpoint Principal
+POST /scan
+
+# body(JSON)
+{
+  "url": "https://example.com"
+}
+
+- Exemplo de resposta da API
+{
+    "url": "https://example.com/",
+    "vulnerable": true,
+    "details": [
+        {
+            "payload": "' OR SLEEP(5)--",
+            "reason": "SQL error message detected"
+        }
+    ]
+}
+
+## 🎯 Objetivo do Projeto
+- Demonstrar conhecimento prático em:
+- Backend com Node.js e TypeScript
+- Criação de APIs REST
+- Conceitos de segurança web
+- Detecção básica de vulnerabilidades
+- Boas práticas de estrutura e validação
